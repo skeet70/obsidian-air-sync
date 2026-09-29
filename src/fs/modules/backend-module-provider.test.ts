@@ -100,6 +100,58 @@ describe("BackendModuleProvider — custom OAuth routing", () => {
 	});
 });
 
+describe("BackendModuleProvider — custom OAuth secret reference preflight", () => {
+	it("reports a non-empty reference whose secret is missing", () => {
+		const settings = settingsWith({
+			authMode: true,
+			customClientId: "missing-name",
+			customClientSecret: "my-client-secret-2",
+		});
+		const { provider } = makeProvider("googledrive", settings, (key) =>
+			key === "my-client-secret-2" ? "CS" : null,
+		);
+
+		expect(provider.unresolvedSecretReferences(["customClientId", "customClientSecret"])).toEqual([
+			"customClientId",
+		]);
+	});
+
+	it("reports no key when every declared reference resolves", () => {
+		const settings = settingsWith({
+			authMode: true,
+			customClientId: "my-client-secret",
+			customClientSecret: "my-client-secret-2",
+		});
+		const { provider } = makeProvider("googledrive", settings, (key) =>
+			key === "my-client-secret" ? "CID" : key === "my-client-secret-2" ? "CS" : null,
+		);
+
+		expect(
+			provider.unresolvedSecretReferences(["customClientId", "customClientSecret"]),
+		).toEqual([]);
+	});
+
+	it("leaves an empty reference to the required-value check and ignores non-reference keys", () => {
+		const settings = settingsWith({
+			authMode: true,
+			customClientId: "",
+			customClientSecret: "my-client-secret-2",
+		});
+		const { provider } = makeProvider("googledrive", settings, () => null);
+
+		expect(
+			provider.unresolvedSecretReferences(["customClientId", "customClientSecret", "not-a-reference"]),
+		).toEqual(["customClientSecret"]);
+	});
+
+	it("treats a Dropbox app key as a public value, never a secret reference", () => {
+		const settings = settingsWith({ authMode: true, customClientId: "PUBLIC-APP-KEY" });
+		const { provider } = makeProvider("dropbox", settings, () => null);
+
+		expect(provider.unresolvedSecretReferences(["customClientId"])).toEqual([]);
+	});
+});
+
 describe("BackendModuleProvider — token namespace", () => {
 	it("keeps OneDrive custom tokens under the legacy -custom keys", () => {
 		const settings = settingsWith({ authMode: true, remoteVaultFolderId: "id:folder" });

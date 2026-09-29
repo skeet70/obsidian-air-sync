@@ -256,6 +256,31 @@ export class BackendModuleProvider implements IBackendProvider {
 		return this.credentialsReady(authModeOf(this.configStore.read()));
 	}
 
+	/**
+	 * Of `keys`, the ones that are declared `secret_reference` fields holding a
+	 * non-empty reference name whose SecretStorage entry is absent or empty.
+	 *
+	 * A non-empty reference that does not resolve is a config error the pre-connect
+	 * guard must surface before an authorization URL is opened with an empty client id
+	 * (the 0.1.50 `hasCredentials`/`onMissingCredentials` behavior). An empty reference
+	 * is left to the caller's required-value check. This reuses the provider's own
+	 * logical-to-physical mapping, so the verdict matches exactly what the module will
+	 * observe through `context.secrets.get`; it reads only current facts and persists
+	 * nothing.
+	 */
+	unresolvedSecretReferences(keys: readonly string[]): string[] {
+		const references = this.referenceFieldKeys();
+		const config = this.configStore.read();
+		const unresolved: string[] = [];
+		for (const key of keys) {
+			if (!references.has(key)) continue;
+			const reference = config[key];
+			if (typeof reference !== "string" || reference === "") continue;
+			if (!this.deps.secretStore.getSecret(reference)) unresolved.push(key);
+		}
+		return unresolved;
+	}
+
 	getIdentity(_settings: AirSyncSettings): string | null {
 		const target = this.target();
 		return target ? `${this.module.id}:${target.id}` : null;

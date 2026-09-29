@@ -22,7 +22,10 @@ function container(): HTMLElement {
 }
 
 /** A fake provider whose module declares the two required custom credentials. */
-function customAppRenderer(hasCredentials: boolean): BackendModuleSettingsRenderer {
+function customAppRenderer(
+	hasCredentials: boolean,
+	unresolvedSecretReferences: readonly string[] = [],
+): BackendModuleSettingsRenderer {
 	const module = createFakeModule({
 		settings: {
 			fields: [
@@ -35,6 +38,7 @@ function customAppRenderer(hasCredentials: boolean): BackendModuleSettingsRender
 		type: module.id,
 		getModule: () => module,
 		hasCredentials: () => hasCredentials,
+		unresolvedSecretReferences: () => [...unresolvedSecretReferences],
 	} as unknown as BackendModuleProvider;
 	return new BackendModuleSettingsRenderer(provider);
 }
@@ -171,5 +175,32 @@ describe("BackendModuleSettingsRenderer — custom-app connect guard", () => {
 
 		expect(startAuth).toHaveBeenCalledTimes(1);
 		expect(__ui.notices).toHaveLength(0);
+	});
+
+	it("does not open the browser when a present reference does not resolve, and names the secret", () => {
+		const settings = mockSettings({
+			backendType: "fakebackend",
+			backendData: {
+				authMode: true,
+				customClientId: "missing-secret",
+				customClientSecret: "name",
+			},
+		});
+		const { actions, startAuth } = actionsSpy();
+
+		customAppRenderer(false, ["customClientId"]).render(
+			container(),
+			settings,
+			() => Promise.resolve(),
+			actions,
+			{} as never,
+		);
+
+		connectButton().click();
+
+		expect(startAuth).not.toHaveBeenCalled();
+		expect(__ui.notices).toContain(
+			`The secret "missing-secret" for Client ID was not found in Obsidian's key store.`,
+		);
 	});
 });

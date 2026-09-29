@@ -128,7 +128,9 @@ export class BackendModuleSettingsRenderer implements IBackendSettingsRenderer {
 	/**
 	 * The module's own auth path reads its custom credentials from config; a missing
 	 * required custom field must be surfaced before the browser is opened with an
-	 * empty client id. Restores the legacy renderers' pre-connect guard.
+	 * empty client id. Restores the legacy renderers' pre-connect guard, including the
+	 * 0.1.50 check that a present secret reference actually resolves: a reference the
+	 * user selected or typed must not silently become an empty `client_id`.
 	 */
 	private guardCustomConnect(
 		settings: AirSyncSettings,
@@ -140,12 +142,20 @@ export class BackendModuleSettingsRenderer implements IBackendSettingsRenderer {
 			void actions.startAuth();
 			return;
 		}
+		const fields = module.settings?.fields ?? [];
 		const requiredKeys = new Set(["customClientId", "customClientSecret"]);
-		const required = (module.settings?.fields ?? []).find(
-			(field) => requiredKeys.has(field.key) && !config[field.key],
-		);
+		const required = fields.find((field) => requiredKeys.has(field.key) && !config[field.key]);
 		if (required) {
 			new Notice(`${required.label} is required`);
+			return false;
+		}
+		const unresolved = this.provider.unresolvedSecretReferences([...requiredKeys]);
+		if (unresolved.length > 0) {
+			const key = unresolved[0]!;
+			const reference = config[key];
+			const label = fields.find((candidate) => candidate.key === key)?.label ?? key;
+			const name = typeof reference === "string" ? reference : "";
+			new Notice(`The secret "${name}" for ${label} was not found in Obsidian's key store.`);
 			return false;
 		}
 		void actions.startAuth();
