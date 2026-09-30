@@ -15,9 +15,6 @@ import {
 	renderUnboundAppFolderField,
 } from "./backend-settings-ui";
 
-/** App-Folder-scoped modules use the in-app folder picker, not a web Picker. */
-const APP_FOLDER_MODULES: ReadonlySet<string> = new Set(["dropbox", "onedrive"]);
-
 /**
  * Core-owned settings renderer for a backend module. It draws the module's
  * declarative {@link BackendSettingsDefinition} through the core renderer and
@@ -89,15 +86,17 @@ export class BackendModuleSettingsRenderer implements IBackendSettingsRenderer {
 			return;
 		}
 
-		// App-Folder-scoped modules keep their in-app picker: it lists the folders that
-		// already exist under the app root (the only namespace the scope exposes) and
-		// binds the chosen name through the default-bind action.
-		if (APP_FOLDER_MODULES.has(module.id)) {
+		// A module listing its picker root's folders gets the in-app picker, which binds
+		// the chosen folder through the default-bind action.
+		if (module.binding.listAppRootFolders) {
+			const vaultName = app.vault.getName();
+			const appRoot = module.binding.appRoot;
 			renderUnboundAppFolderField(folderSetting, {
 				app,
 				settings,
 				provider: this.provider,
-				defaultLabel: `/${app.vault.getName()}`,
+				defaultLabel: appRoot ? appRoot.defaultFolderPath(vaultName) : `/${vaultName}`,
+				rootName: appRoot?.name,
 				modalTitle: `Choose a ${module.displayName} folder`,
 				onSave,
 				actions,

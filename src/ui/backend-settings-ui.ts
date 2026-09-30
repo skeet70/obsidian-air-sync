@@ -77,10 +77,10 @@ export function renderBoundFolderField(
 }
 
 /**
- * Render the unbound remote-folder field for an App-Folder-scoped PKCE backend
- * (Dropbox, OneDrive): a default-folder CTA button and a "Choose folder" button that
- * opens the shared {@link AppFolderPickerModal}. The two backends differ only in the
- * default label and the modal title.
+ * Render the unbound remote-folder field for a module with the in-app picker: a
+ * default-folder CTA button and a "Choose folder" button that opens the shared
+ * {@link AppFolderPickerModal}. `rootName` names the picker root when it is not the
+ * provider's app folder; such a root accepts nested folder paths.
  */
 export function renderUnboundAppFolderField(
 	folderSetting: Setting,
@@ -89,14 +89,15 @@ export function renderUnboundAppFolderField(
 		settings: AirSyncSettings;
 		provider: AppFolderPickerProvider | undefined;
 		defaultLabel: string;
+		rootName: string | undefined;
 		modalTitle: string;
 		onSave: (updates: Record<string, unknown>) => Promise<void>;
 		actions: BackendConnectionActions;
 	},
 ): void {
-	const { app, settings, provider, defaultLabel, modalTitle, onSave, actions } = opts;
+	const { app, settings, provider, defaultLabel, rootName, modalTitle, onSave, actions } = opts;
 	folderSetting.setDesc(
-		"Choose where this vault syncs: use the default folder, or pick an existing one inside the app folder.",
+		`Choose where this vault syncs: use the default folder, or pick an existing one inside ${rootName ?? "the app folder"}.`,
 	);
 	folderSetting
 		.addButton((button) =>
@@ -105,8 +106,7 @@ export function renderUnboundAppFolderField(
 				.setCta()
 				.onClick(async () => {
 					// Clear any folder name queued by the modal first: the default button
-					// always binds the vault name. Otherwise a pick whose bind failed would
-					// leave a stale pendingPickedFolderPath this button would silently reuse.
+					// always binds the default folder.
 					await onSave({ pendingPickedFolderPath: "" });
 					await actions.bindDefaultFolder();
 				}),
@@ -119,6 +119,7 @@ export function renderUnboundAppFolderField(
 					new AppFolderPickerModal(
 						app,
 						modalTitle,
+						rootName,
 						provider,
 						settings,
 						onSave,

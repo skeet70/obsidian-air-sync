@@ -26,6 +26,14 @@ export interface BackendAuth {
 	 */
 	readonly credentialKeys: readonly string[];
 
+	/**
+	 * How `complete` is reached. `"callback"` (default): core's protocol handler or a
+	 * pasted code delivers the input. `"poll"`: the provider has no redirect back to
+	 * Obsidian, so core calls `complete` right after `start` with an empty input and
+	 * `complete` waits for the user to finish in the browser.
+	 */
+	readonly completion?: BackendAuthCompletion;
+
 	/** Begin authentication; returns config to persist (e.g. a state/verifier). */
 	start(context: BackendRuntimeContext, config: Readonly<JsonObject>): Promise<JsonPatch>;
 
@@ -39,3 +47,5 @@ export interface BackendAuth {
 	/** Best-effort provider revocation before core clears local state. */
 	revoke?(context: BackendRuntimeContext, config: Readonly<JsonObject>): Promise<void>;
 }
+
+export type BackendAuthCompletion = "callback" | "poll";

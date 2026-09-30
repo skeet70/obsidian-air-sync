@@ -58,9 +58,9 @@ export type {
 	BackendAuthHost,
 } from "./runtime";
 
-export type { BackendAuth } from "./auth";
+export type { BackendAuth, BackendAuthCompletion } from "./auth";
 
-export type { BackendTarget, JsonPatch, BindingResult, BackendBinding } from "./binding";
+export type { BackendTarget, JsonPatch, BindingResult, BackendBinding, BackendAppRoot } from "./binding";
 
 export type {
 	BackendSettingField,

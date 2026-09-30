@@ -121,6 +121,8 @@ redirect URI once:
 
 Tokens are long-lived; redo the bootstrap only if one is revoked.
 
+Proton Drive has no OAuth app or redirect. `npm run e2e:bootstrap -- protondrive` runs the module's own `auth.start`/`auth.complete`: it prints an `account.proton.me` sign-in URL, polls until you have signed in, and writes the module's secrets (session tokens and the user-key password) to the gitignored `.e2e-protondrive-secrets.json` (mode 600; override the path with `AIRSYNC_E2E_PROTONDRIVE_SECRETS`). The e2e rewrites that file whenever Proton rotates the refresh token. Use a throwaway Proton account.
+
 ## Environment variables
 
 Read from the real environment or a gitignored `.env.e2e` at the repo root (real env wins):
@@ -133,6 +135,7 @@ Read from the real environment or a gitignored `.env.e2e` at the repo root (real
 | `AIRSYNC_E2E_DROPBOX_REFRESH_TOKEN` | Dropbox — minted by the bootstrap |
 | `AIRSYNC_E2E_ONEDRIVE_CLIENT_ID` | OneDrive — your Entra app client id (for loopback + refresh) |
 | `AIRSYNC_E2E_ONEDRIVE_REFRESH_TOKEN` | OneDrive — minted by the bootstrap |
+| `AIRSYNC_E2E_PROTONDRIVE_SECRETS` | Proton Drive: optional path of the secrets file the bootstrap writes |
 | `AIRSYNC_E2E_OAUTH_PORT` | Optional loopback port (default 53682) |
 | `AIRSYNC_E2E_EXTRA_CA` | Optional PEM bundle of extra trust anchors for the Electron `net` host (see [Running behind a TLS-intercepting proxy](#running-behind-a-tls-intercepting-proxy)) |
 
@@ -145,6 +148,7 @@ npm run test:e2e           # all backends — the per-backend files run IN PARAL
 npm run test:e2e:google    # Google Drive only
 npm run test:e2e:dropbox   # Dropbox only
 npm run test:e2e:onedrive  # OneDrive only
+npm run test:e2e:protondrive  # Proton Drive only
 ```
 
 - `npm run test:e2e` runs the per-backend files **concurrently** (different services =

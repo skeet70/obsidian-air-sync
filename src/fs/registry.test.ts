@@ -11,9 +11,10 @@ vi.mock("obsidian");
 
 // A secret store that satisfies every module's token lookup, so each provider's
 // `isConnected`/`prepare` can build its managed FS.
+const PROTON_SESSION = JSON.stringify({ uid: "UID", accessToken: "AT", refreshToken: "RT", keyPassword: "KP" });
 const connectedSecretStore: ISecretStore = {
 	getSecret: (id: string) =>
-		id.includes("refresh") ? "RT" : id.includes("access") ? "AT" : null,
+		id.includes("session") ? PROTON_SESSION : id.includes("refresh") ? "RT" : id.includes("access") ? "AT" : null,
 	setSecret: () => {},
 };
 
@@ -21,7 +22,7 @@ function connectedSettings(): AirSyncSettings {
 	return {
 		vaultId: "vault-1",
 		backendType: "googledrive",
-		backendData: { remoteVaultFolderId: "FID", authMode: false },
+		backendData: { remoteVaultFolderId: "VOL~FID", authMode: false },
 	} as unknown as AirSyncSettings;
 }
 
@@ -42,7 +43,7 @@ describe("backend module registry composition", () => {
 		});
 	});
 
-	it("registers exactly the three canonical module ids and no legacy alias", () => {
+	it("registers exactly the canonical module ids and no legacy alias", () => {
 		const types = getAllBackendProviders().map((p) => p.type).sort();
 		expect(types).toEqual([...MANAGED_REMOTE_BACKEND_FAMILIES].sort());
 		for (const alias of ["googledrive-custom", "onedrive-custom", "dropbox-custom"]) {

@@ -68,12 +68,27 @@ export interface BackendBinding {
 	): Promise<BackendTarget | null>;
 
 	/**
-	 * List the folder names directly under an App-Folder-scoped root, for the core
-	 * in-app folder picker. Optional: only a backend whose whole visible namespace is
-	 * its own app folder offers it. Core renders the modal; this only returns facts.
+	 * List the folder names directly under the picker root, for the core in-app folder
+	 * picker. Declaring it gives the module that picker: the pick is written to
+	 * `pendingPickedFolderPath` and bound through {@link resolveDefault}. Core renders
+	 * the modal; this only returns facts.
 	 */
 	listAppRootFolders?(
 		context: BackendRuntimeContext,
 		config: Readonly<JsonObject>,
 	): Promise<readonly string[]>;
+
+	/**
+	 * How the in-app picker describes its root. A module declaring it accepts a
+	 * `/`-separated nested `pendingPickedFolderPath`. Omitted: the root is the provider's
+	 * app folder and the unpicked default is `/<vault>`.
+	 */
+	readonly appRoot?: BackendAppRoot;
+}
+
+export interface BackendAppRoot {
+	/** Shown to the user, e.g. "My files". */
+	readonly name: string;
+	/** The folder {@link BackendBinding.resolveDefault} binds when nothing was picked, relative to the root. */
+	defaultFolderPath(vaultName: string): string;
 }

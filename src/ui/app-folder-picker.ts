@@ -14,16 +14,14 @@ export interface AppFolderPickerProvider {
 }
 
 /**
- * In-app folder picker for an App-Folder-scoped backend (Dropbox, OneDrive). Lists the
- * folders directly under the backend's app-folder root and lets the user pick an
- * existing one or type a new name. On confirm it writes the chosen name to
- * `pendingPickedFolderPath` via the renderer-provided `onSave`, then runs `bindDefault`
- * (the default-bind action), so the provider's `resolveRemoteVault` find-or-creates
- * `/<name>` and binds its id.
+ * Shown for a module declaring `binding.listAppRootFolders`. Lists the folders directly
+ * under the picker root and lets the user pick an existing one or type a new name. On
+ * confirm it writes the choice to `pendingPickedFolderPath` via `onSave`, then runs
+ * `bindDefault`, so the module's `resolveDefault` find-or-creates that folder and binds
+ * its id.
  *
- * This replaces a full-drive web picker: App Folder scope means the app only ever sees
- * folders under its own root, so a picker that then had to reject outside picks was
- * misleading. No BackendManager changes are needed — binding reuses the default path.
+ * `rootName` names a picker root other than the provider's app folder; the text field
+ * then takes a `/`-separated path under it.
  */
 export class AppFolderPickerModal extends Modal {
 	private selected = "";
@@ -32,6 +30,7 @@ export class AppFolderPickerModal extends Modal {
 	constructor(
 		app: App,
 		private title: string,
+		private rootName: string | undefined,
 		private provider: AppFolderPickerProvider,
 		private settings: AirSyncSettings,
 		private onSave: (updates: Record<string, unknown>) => Promise<void>,
@@ -44,7 +43,9 @@ export class AppFolderPickerModal extends Modal {
 		const { contentEl } = this;
 		this.setTitle(this.title);
 		contentEl.createEl("p", {
-			text: "Pick an existing folder in the app folder, or create a new one. This vault syncs into the chosen folder.",
+			text: this.rootName
+				? `Pick a folder in ${this.rootName}, or type a path such as notes/vault. Missing folders are created. This vault syncs into the chosen folder.`
+				: "Pick an existing folder in the app folder, or create a new one. This vault syncs into the chosen folder.",
 		});
 
 		let folders: string[] = [];
@@ -74,8 +75,12 @@ export class AppFolderPickerModal extends Modal {
 		}
 
 		new Setting(contentEl)
-			.setName("New folder")
-			.setDesc("Or create a new folder by name.")
+			.setName(this.rootName ? "Folder path" : "New folder")
+			.setDesc(
+				this.rootName
+					? `Or type a folder path under ${this.rootName}.`
+					: "Or create a new folder by name.",
+			)
 			.addText((text) =>
 				text.setPlaceholder("My vault").onChange((value) => { this.newName = value.trim(); }),
 			);
@@ -95,8 +100,8 @@ export class AppFolderPickerModal extends Modal {
 			return;
 		}
 		this.close();
-		// Queue the chosen name, then trigger the default-bind action — the provider's
-		// resolveRemoteVault find-or-creates /<name> and binds its id.
+		// Queue the chosen name, then trigger the default-bind action: the module's
+		// resolveDefault find-or-creates it and binds its id.
 		await this.onSave({ pendingPickedFolderPath: name });
 		await this.bindDefault();
 	}

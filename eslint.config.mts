@@ -442,8 +442,10 @@ export default defineConfig(
 		// Re-pinned from 369 for `createRemoteFs`: awaiting a backend module's async
 		// `prepare` before handing back its ready filesystem IS the connect-boundary
 		// acquisition step, and it stays beside the connect/teardown logic owned here.
+		// Re-pinned from 373 for poll-completed auth: a module with no redirect back to
+		// Obsidian completes inside the same connect call that started it.
 		files: ["src/fs/backend-manager.ts"],
-		rules: { "max-lines": ["error", { max: 373, skipBlankLines: true, skipComments: true }] },
+		rules: { "max-lines": ["error", { max: 374, skipBlankLines: true, skipComments: true }] },
 	},
 	{
 		// Core composition root for the module boundary: it owns the per-connection

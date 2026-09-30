@@ -10,6 +10,7 @@
 		"./googledrive.e2e.ts",
 		"./dropbox.e2e.ts",
 		"./onedrive.e2e.ts",
+		"./protondrive.e2e.ts",
 		"./bootstrap.ts",
 		"./vitest.e2e.config.ts",
 		"./obsidian.shim.ts",

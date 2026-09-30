@@ -16,6 +16,8 @@ const context = await esbuild.context({
 		js: banner,
 	},
 	entryPoints: ["src/main.ts"],
+	// tsconfig.json maps @protontech/crypto to a type-only declaration; bundle the real package.
+	tsconfig: "tsconfig.bundle.json",
 	bundle: true,
 	external: [
 		"obsidian",

@@ -15,7 +15,13 @@
 		"lib": [
 			"DOM",
 			"ES2022"
-		]
+		],
+		"paths": {
+			"@protontech/crypto": ["./src/backends/protondrive/protontech-crypto.d.ts"],
+			"@protontech/crypto/constants": ["./src/backends/protondrive/protontech-crypto.d.ts"],
+			"@protontech/crypto/srp": ["./src/backends/protondrive/protontech-crypto.d.ts"],
+			"@protontech/crypto/proxy/endpoint/api.ts": ["./src/backends/protondrive/protontech-crypto.d.ts"]
+		}
 	},
 	"include": [
 		"src/**/*.ts",

@@ -2,10 +2,11 @@ import type { BackendModule } from "../../../src/backend-api";
 import { googleDriveModule } from "../../../src/backends/googledrive/module";
 import { oneDriveModule } from "../../../src/backends/onedrive/module";
 import { dropboxModule } from "../../../src/backends/dropbox/module";
+import { protonDriveModule } from "../../../src/backends/protondrive/module";
 import { BackendModuleRegistry } from "../../../src/fs/modules/registry";
 
 /**
- * The three canonical backend modules, each keyed by its own id. This is the
+ * The canonical backend modules, each keyed by its own id. This is the
  * module-definition catalog: a cell is addressed by the module's validated id, not
  * by a filesystem constructor, so the same catalog works for a future external
  * module that never subclasses a core filesystem.
@@ -14,6 +15,7 @@ export const REMOTE_BACKEND_MODULES = {
 	googledrive: googleDriveModule,
 	onedrive: oneDriveModule,
 	dropbox: dropboxModule,
+	protondrive: protonDriveModule,
 } as const satisfies Readonly<Record<string, BackendModule>>;
 
 export type RemoteBackendFamily = keyof typeof REMOTE_BACKEND_MODULES;
@@ -83,7 +85,16 @@ export function validateRemoteBackendCatalog(catalog: RemoteBackendCatalog): rea
 	return issues;
 }
 
-/** The six auth cases: three modules × built-in/custom OAuth. */
+export type RemoteBackendAuthMode = "default" | "custom";
+
+/** Each module's sign-in modes. `custom` is a user-supplied OAuth client; Proton has none. */
+export const REMOTE_BACKEND_AUTH_MODES = {
+	googledrive: ["default", "custom"],
+	onedrive: ["default", "custom"],
+	dropbox: ["default", "custom"],
+	protondrive: ["default"],
+} as const satisfies Readonly<Record<RemoteBackendFamily, readonly RemoteBackendAuthMode[]>>;
+
 export const REMOTE_BACKEND_AUTH_CASES = MANAGED_REMOTE_BACKEND_FAMILIES.flatMap((moduleId) =>
-	(["default", "custom"] as const).map((authMode) => ({ moduleId, authMode })),
+	REMOTE_BACKEND_AUTH_MODES[moduleId].map((authMode: RemoteBackendAuthMode) => ({ moduleId, authMode })),
 );

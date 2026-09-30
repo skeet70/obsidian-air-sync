@@ -1,3 +1,5 @@
+import type { BackendAuthCompletion } from "../backend-api";
+
 /**
  * Authentication provider interface — abstracts OAuth/credential lifecycle.
  *
@@ -10,4 +12,6 @@
 export interface IAuthProvider {
 	startAuth(backendData: Record<string, unknown>): Promise<Record<string, unknown>>;
 	completeAuth(input: string, backendData: Record<string, unknown>): Promise<Record<string, unknown>>;
+	/** Absent means `"callback"`. */
+	readonly completion?: BackendAuthCompletion;
 }

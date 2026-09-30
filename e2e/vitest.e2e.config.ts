@@ -26,10 +26,18 @@ export default defineConfig({
 		// rate-limit buckets), while tests WITHIN each file stay sequential (vitest
 		// default), so a single backend is never hammered concurrently.
 		fileParallelism: true,
+		server: {
+			deps: {
+				// @protontech/crypto ships raw TypeScript, which Node will not strip under node_modules.
+				inline: [/@protontech\//],
+			},
+		},
 	},
 	resolve: {
-		alias: {
-			obsidian: resolve(__dirname, "obsidian.shim.ts"),
-		},
+		alias: [
+			{ find: "obsidian", replacement: resolve(__dirname, "obsidian.shim.ts") },
+			// openpgp exports its lightweight build to browsers only; Node gets the full build.
+			{ find: /^openpgp\/lightweight$/, replacement: "openpgp" },
+		],
 	},
 });

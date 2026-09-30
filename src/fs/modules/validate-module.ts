@@ -110,6 +110,9 @@ function validateAuth(issues: Issues, module: Json): void {
 	validateFunction(issues, auth, "start", "auth.start", true);
 	validateFunction(issues, auth, "complete", "auth.complete", true);
 	validateFunction(issues, auth, "revoke", "auth.revoke", false);
+	if (auth.completion !== undefined && auth.completion !== "callback" && auth.completion !== "poll") {
+		issues.add("invalid_value", "auth.completion", 'auth.completion must be "callback" or "poll"');
+	}
 	validateCredentialKeys(issues, auth);
 }
 
@@ -174,6 +177,8 @@ function validateBinding(issues: Issues, module: Json): void {
 	validateFunction(issues, binding, "beginPick", "binding.beginPick", false);
 	validateFunction(issues, binding, "completePick", "binding.completePick", false);
 	validateFunction(issues, binding, "getDisplayPath", "binding.getDisplayPath", false);
+	validateFunction(issues, binding, "listAppRootFolders", "binding.listAppRootFolders", false);
+	validateAppRoot(issues, binding);
 	const hasBegin = binding.beginPick !== undefined;
 	const hasComplete = binding.completePick !== undefined;
 	if (hasBegin !== hasComplete) {
@@ -182,6 +187,20 @@ function validateBinding(issues: Issues, module: Json): void {
 			"binding",
 			"beginPick and completePick must be declared together",
 		);
+	}
+}
+
+function validateAppRoot(issues: Issues, binding: Json): void {
+	const appRoot = binding.appRoot;
+	if (appRoot === undefined) return;
+	if (!isJson(appRoot)) {
+		issues.add("missing_object", "binding.appRoot", "binding.appRoot must be an object");
+		return;
+	}
+	validateStringField(issues, appRoot, "name", "binding.appRoot.name");
+	validateFunction(issues, appRoot, "defaultFolderPath", "binding.appRoot.defaultFolderPath", true);
+	if (binding.listAppRootFolders === undefined) {
+		issues.add("missing_function", "binding.listAppRootFolders", "binding.appRoot requires binding.listAppRootFolders");
 	}
 }
 

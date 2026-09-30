@@ -304,17 +304,23 @@ export class BackendManager {
 			this.deps.notify("No backend configured");
 			return;
 		}
+		const provider = this.backendProvider;
 		try {
 			// The module-backed provider commits its auth patch (e.g. `pendingAuthState`,
 			// `pendingCodeVerifier`) to the live bag during `startAuth`. Re-read the bag
 			// AFTER the await so a pre-await snapshot cannot clobber that committed state.
-			const updates = await this.backendProvider.auth.startAuth(settings.backendData);
+			const updates = await provider.auth.startAuth(settings.backendData);
 			settings.backendData = { ...settings.backendData, ...updates };
 			await this.deps.saveSettings();
 		} catch (err) {
 			const msg = errorMessage(err);
 			this.deps.getLogger().error("Failed to start backend connection", { message: msg });
 			this.deps.notify(`Connection failed: ${msg}`);
+			return;
+		}
+		if (provider.auth.completion === "poll") {
+			this.deps.notify(`Finish signing in to ${provider.displayName} in your browser. Air Sync connects automatically.`);
+			await this.completeBackendConnect("");
 		}
 	}
 

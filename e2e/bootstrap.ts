@@ -7,6 +7,8 @@ import { buildOAuthState, computeS256Challenge, generateRandomString } from "../
 import { createPlatformTransport } from "../src/fs/platform-http-transport";
 import { loadDotEnvE2e } from "./helpers/env";
 import { announceAuthorizeUrl, loopbackPort, startLoopback, writeEnvE2e } from "./helpers/loopback";
+import { protonDriveModule } from "../src/backends/protondrive/module";
+import { protonRuntimeContext, protonSecretsPath } from "./helpers/protondrive";
 
 /**
  * One-time helper to mint a refresh token for the e2e suite (ADR 0003) WITHOUT a
@@ -110,14 +112,24 @@ async function bootstrapOnedrive(): Promise<void> {
 	}
 }
 
+/** Proton has no redirect: the module's own start/complete pair opens a session fork and polls it. */
+async function bootstrapProtondrive(): Promise<void> {
+	const context = protonRuntimeContext();
+	await protonDriveModule.auth.start(context, {});
+	stdout.write("Waiting for the sign-in to finish (up to 10 minutes)...\n");
+	await protonDriveModule.auth.complete(context, "", {});
+	stdout.write(`\n✓ Proton Drive session written to ${protonSecretsPath()}\n`);
+}
+
 async function main(): Promise<void> {
 	loadDotEnvE2e(); // pick up AIRSYNC_E2E_*_CLIENT_ID/_SECRET from .env.e2e
 	const which = process.argv[2];
 	if (which === "google") await bootstrapGoogle();
 	else if (which === "dropbox") await bootstrapDropbox();
 	else if (which === "onedrive") await bootstrapOnedrive();
+	else if (which === "protondrive") await bootstrapProtondrive();
 	else {
-		stdout.write("Usage: npm run e2e:bootstrap -- <google|dropbox|onedrive>\n");
+		stdout.write("Usage: npm run e2e:bootstrap -- <google|dropbox|onedrive|protondrive>\n");
 		process.exitCode = 1; // an unknown/typo'd subcommand must not look like success
 	}
 }

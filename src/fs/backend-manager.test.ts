@@ -1152,3 +1152,43 @@ describe("BackendManager — module auth patches survive the connect boundary", 
 		expect(settings.backendData).not.toHaveProperty("pendingCodeVerifier");
 	});
 });
+
+describe("BackendManager — poll-completed auth", () => {
+	function pollingManager(completion: "poll" | undefined) {
+		const settings = mockSettings();
+		settings.backendType = "test";
+		const startAuth = vi.fn().mockResolvedValue({});
+		const completeAuth = vi.fn().mockResolvedValue({});
+		fakeProvider = { ...fakeProvider, auth: { startAuth, completeAuth, completion } };
+		const deps = createDeps(settings);
+		return { mgr: new BackendManager(deps), deps, startAuth, completeAuth };
+	}
+
+	it("completes the connection inside the connect call when the provider polls", async () => {
+		const { mgr, deps, completeAuth } = pollingManager("poll");
+
+		await mgr.startBackendConnect();
+
+		expect(completeAuth).toHaveBeenCalledWith("", expect.anything());
+		expect(deps.onConnected).toHaveBeenCalledWith(fakeFs);
+	});
+
+	it("leaves completion to the callback when the provider does not poll", async () => {
+		const { mgr, deps, completeAuth } = pollingManager(undefined);
+
+		await mgr.startBackendConnect();
+
+		expect(completeAuth).not.toHaveBeenCalled();
+		expect(deps.onConnected).not.toHaveBeenCalled();
+	});
+
+	it("does not poll after the start step failed", async () => {
+		const { mgr, deps, startAuth, completeAuth } = pollingManager("poll");
+		startAuth.mockRejectedValue(new Error("no network"));
+
+		await mgr.startBackendConnect();
+
+		expect(completeAuth).not.toHaveBeenCalled();
+		expect(deps.notify).toHaveBeenCalledWith("Connection failed: no network");
+	});
+});

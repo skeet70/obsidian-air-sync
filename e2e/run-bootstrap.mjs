@@ -24,7 +24,12 @@ await build({
 	platform: "node",
 	format: "esm",
 	outfile,
-	alias: { obsidian: resolve(here, "obsidian.shim.ts") },
+	tsconfig: resolve(here, "..", "tsconfig.bundle.json"),
+	alias: {
+		obsidian: resolve(here, "obsidian.shim.ts"),
+		// openpgp exports its lightweight build to browsers only.
+		"openpgp/lightweight": "openpgp",
+	},
 });
 
 try {

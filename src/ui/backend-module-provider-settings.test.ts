@@ -4,6 +4,7 @@ import { BackendModuleSettingsRenderer } from "./backend-module-provider-setting
 import type { BackendModuleProvider } from "../fs/modules/backend-module-provider";
 import type { BackendConnectionActions } from "../fs/settings-renderer";
 import type { AirSyncSettings } from "../settings";
+import type { BackendBinding } from "../backend-api";
 import { mockSettings } from "../__mocks__/sync-test-helpers";
 import { createFakeModule } from "../../tests/backend-api/fake-module";
 import { googleDriveModule } from "../backends/googledrive/module";
@@ -126,6 +127,48 @@ describe("BackendModuleSettingsRenderer — unbound default folder", () => {
 		const labels = __ui.buttons.map((button) => button.label);
 		expect(labels).toContain("obsidian-air-sync/Personal");
 		expect(labels).not.toContain("Use default folder");
+	});
+});
+
+describe("BackendModuleSettingsRenderer — in-app folder picker", () => {
+	function renderUnbound(binding: BackendBinding): string[] {
+		const module = createFakeModule({ binding });
+		const provider = {
+			type: module.id,
+			getModule: () => module,
+			hasCredentials: () => true,
+		} as unknown as BackendModuleProvider;
+		const app = { vault: { getName: () => "Personal" } };
+		new BackendModuleSettingsRenderer(provider).render(
+			container(),
+			mockSettings({ backendType: module.id, backendData: {} }),
+			() => Promise.resolve(),
+			actionsSpy().actions,
+			app as never,
+		);
+		return __ui.buttons.filter((button) => button.name === "Remote vault folder").map((button) => button.label);
+	}
+	const resolveDefault: BackendBinding["resolveDefault"] = () =>
+		Promise.resolve({ patch: {}, target: { id: "root" } });
+
+	it("offers the picker to a module declaring listAppRootFolders, labelled with its app-root default", () => {
+		const labels = renderUnbound({
+			resolveDefault,
+			listAppRootFolders: () => Promise.resolve([]),
+			appRoot: { name: "My files", defaultFolderPath: (vault) => `obsidian-air-sync/${vault}` },
+		});
+		expect(labels).toEqual(["obsidian-air-sync/Personal", "Choose folder"]);
+	});
+
+	it("labels the default /<vault> when the module declares no app root", () => {
+		expect(renderUnbound({ resolveDefault, listAppRootFolders: () => Promise.resolve([]) })).toEqual([
+			"/Personal",
+			"Choose folder",
+		]);
+	});
+
+	it("offers no picker to a module without listAppRootFolders or a web picker", () => {
+		expect(renderUnbound({ resolveDefault })).toEqual(["obsidian-air-sync/Personal"]);
 	});
 });
 

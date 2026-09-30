@@ -24,6 +24,13 @@ import {
 	registerOneDriveManagedPriorityObservationContract,
 	registerOneDriveManagedConcurrencyContract,
 } from "./onedrive/managed.contract-harness";
+import {
+	registerProtonDriveManagedIFileSystemContract,
+	registerProtonDriveManagedCachingContract,
+	registerProtonDriveManagedChangeDetectionContract,
+	registerProtonDriveManagedPriorityObservationContract,
+	registerProtonDriveManagedConcurrencyContract,
+} from "./protondrive/managed.contract-harness";
 
 /**
  * The five contracts, for each backend's `BackendModule` + `RemoteBackendAdapter`
@@ -61,6 +68,16 @@ const managedRemoteBackendCatalog = {
 			concurrency: registerOneDriveManagedConcurrencyContract,
 		},
 	},
+	protondrive: {
+		moduleId: "protondrive",
+		contracts: {
+			filesystem: registerProtonDriveManagedIFileSystemContract,
+			caching: registerProtonDriveManagedCachingContract,
+			changeDetection: registerProtonDriveManagedChangeDetectionContract,
+			priorityObservation: registerProtonDriveManagedPriorityObservationContract,
+			concurrency: registerProtonDriveManagedConcurrencyContract,
+		},
+	},
 } satisfies RemoteBackendCatalog;
 
 const catalogIssues = validateRemoteBackendCatalog(managedRemoteBackendCatalog);
@@ -72,7 +89,7 @@ for (const [family, cell] of Object.entries(managedRemoteBackendCatalog)) {
 }
 
 describe("backend module conformance catalog", () => {
-	it("covers all three modules × five contracts with validated modules", () => {
+	it("covers every module × five contracts with validated modules", () => {
 		expect(catalogIssues).toEqual([]);
 	});
 });

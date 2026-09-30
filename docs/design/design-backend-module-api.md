@@ -35,9 +35,9 @@ capabilities.
 | `displayName` | Human-readable name. |
 | `version` | Module version (SemVer), independent of `apiVersion`. |
 | `apiVersion` | Must be `3`. |
-| `auth` | `BackendAuth`: `credentialKeys`, `start`, `complete`, optional `revoke`. |
+| `auth` | `BackendAuth`: `credentialKeys`, `start`, `complete`, optional `revoke`, optional `completion`. |
 | `settings?` | Declarative field list (text / secret_reference / select / toggle). |
-| `binding` | `resolveDefault`, optional `beginPick`/`completePick`/`getDisplayPath`. |
+| `binding` | `resolveDefault`, optional `beginPick`/`completePick`/`getDisplayPath`/`listAppRootFolders`/`appRoot`. |
 | `getTarget(config)` | Stable target from config, **no network**; `null` if unbound. |
 | `createAdapter(context, config, target)` | Builds the provider adapter for a bound connection. |
 | `disconnectConfig?(config)` | The config bag to keep after a disconnect; omit to keep only `authMode`. |
@@ -156,6 +156,10 @@ revoke (best effort) → clear the module's declared `credentialKeys` and any to
 keys → clear config to the module's `disconnectConfig` bag → clear the target checkpoint →
 reset baseline → dispose the connection (closing the prepared filesystem). User-owned
 secret references are never deleted.
+
+`auth.completion` says how `complete` is reached. The default, `"callback"`, is the protocol-handler or pasted-code route above. A provider that cannot redirect back to Obsidian declares `"poll"`: core calls `complete` with an empty input right after `start` succeeds, inside the same connect action, and `complete` waits for the user to finish in the browser (Proton Drive's session fork).
+
+A module declaring `binding.listAppRootFolders` gets core's in-app folder picker before a folder is bound: it lists the folder names directly under the picker root, core writes the user's choice to `pendingPickedFolderPath`, and `resolveDefault` binds that folder and clears the field. Without `binding.appRoot` the root is the provider's app folder (Dropbox, OneDrive) and the default button reads `/<vault>`. `appRoot` names another root and the default folder `resolveDefault` binds (`name: "My files"`, `obsidian-air-sync/<vault>` for Proton Drive); such a module accepts a `/`-separated nested path.
 
 ## Errors and checksums
 

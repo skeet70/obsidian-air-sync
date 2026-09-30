@@ -115,6 +115,7 @@ export class BackendModuleProvider implements IBackendProvider {
 				await this.connection!.completeAuth(input);
 				return {};
 			},
+			completion: module.auth.completion,
 		};
 	}
 
