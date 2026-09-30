@@ -147,7 +147,10 @@ evidence rather than being a second source of truth. Each cycle captures a start
 and acknowledges exactly that snapshot: a clean completion removes captured dirty paths and
 generation-matching relations, a partial completion removes only relations and retains dirty
 paths, and a mid-cycle event reusing a key survives either operation (see
-[Acknowledge pattern](error-handling.md#acknowledge-pattern)).
+[Acknowledge pattern](error-handling.md#acknowledge-pattern)). Admission retires a local
+folder rename whose source has no committed row and is absent on both sides (Obsidian's
+"Untitled" folder named before its first sync), so files moved into the new name keep
+their own rename evidence.
 
 ### Remote changes
 

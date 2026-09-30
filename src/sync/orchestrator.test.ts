@@ -425,6 +425,43 @@ describe("SyncOrchestrator", () => {
 			await orchestrator.close();
 		});
 
+		it("moves a synced note into a folder created and renamed in the same cycle", async () => {
+			const localFs = createMockLocalFs();
+			const remoteFs = createMockRemoteFs();
+			confirmRemoteWrites(remoteFs);
+			const tracker = new LocalChangeTracker();
+			const settings = baseMockSettings({
+				backendType: "test", vaultId: `test-${Math.random()}`, lastSyncedIdentity: "test:root",
+			});
+			const deps = createDeps({
+				getSettings: () => settings, localFs: () => localFs, remoteFs: () => remoteFs,
+				localTracker: tracker,
+			});
+			const orchestrator = new SyncOrchestrator(deps);
+			await localFs.write("Note.md", new TextEncoder().encode("note").buffer, 1000);
+			await orchestrator.runSync();
+			expect(readText(remoteFs, "Note.md")).toBe("note");
+			const remoteRename = vi.spyOn(remoteFs, "rename");
+
+			// Obsidian's "New folder" creates "Untitled" and renames it; the move lands
+			// inside the same debounce window.
+			await localFs.mkdir("Untitled");
+			tracker.markDirty("Untitled");
+			await localFs.rename("Untitled", "Test folder");
+			tracker.markFolderRenamed("Test folder", "Untitled");
+			await localFs.rename("Note.md", "Test folder/Note.md");
+			tracker.markRenamed("Test folder/Note.md", "Note.md");
+			await orchestrator.runSync();
+			await orchestrator.runSync();
+
+			expect(remoteRename).toHaveBeenCalledWith("Note.md", "Test folder/Note.md");
+			expect(remoteFs.files.has("Note.md")).toBe(false);
+			expect(readText(remoteFs, "Test folder/Note.md")).toBe("note");
+			expect(localFs.files.has("Note.md")).toBe(false);
+			expect(deps.onStatusChange).toHaveBeenLastCalledWith("idle");
+			await orchestrator.close();
+		});
+
 		it("consumes a fully excluded folder rename after a clean cycle", async () => {
 			const localFs = createMockLocalFs();
 			const remoteFs = createMockRemoteFs();
