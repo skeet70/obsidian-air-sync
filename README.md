@@ -3,6 +3,8 @@
 
 > Note: as a fork this cannot be installed from the community plugins list. You'll need to check this repo out, run `npm install && npm run build`, then copy `main.js`, `manifest.json`, and `styles.css` into `your-vault/.obsidian/plugins/air-sync`.
 
+> License: the Proton Drive backend bundles `@protontech/crypto` (GPL-3.0) into `main.js`. Air Sync's own source stays MIT, but a built `main.js` that includes this backend is a combined work distributed under GPL-3.0. If this backend were released or merged upstream, Air Sync releases would have to be distributed under GPL-3.0. See [docs/protondrive-backend.md](docs/protondrive-backend.md).
+
 **Like air, sync should simply be there.**
 
 Open Obsidian on any device and keep going.
