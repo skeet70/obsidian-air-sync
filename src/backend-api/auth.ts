@@ -30,7 +30,9 @@ export interface BackendAuth {
 	 * How `complete` is reached. `"callback"` (default): core's protocol handler or a
 	 * pasted code delivers the input. `"poll"`: the provider has no redirect back to
 	 * Obsidian, so core calls `complete` right after `start` with an empty input and
-	 * `complete` waits for the user to finish in the browser.
+	 * `complete` waits for the user to finish in the browser. A poll module's `start`
+	 * sets `pendingAuthState` and a successful `complete` unsets it; while it is set and
+	 * credentials are absent, core calls `complete` again at start-up and on foreground.
 	 */
 	readonly completion?: BackendAuthCompletion;
 

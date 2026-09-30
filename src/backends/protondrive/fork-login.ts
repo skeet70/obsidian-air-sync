@@ -23,12 +23,19 @@ interface PendingFork {
 export const FORK_SECRET_KEY = "pending-fork";
 
 /** Proton's own polling schedule for this flow (`proton-drive-sdk-account/authWeb.ts`). */
-const FORK_INITIAL_DELAY_MS = 5_000;
 const FORK_POLL_INTERVAL_MS = 5_000;
 const FORK_MAX_POLL_TIME_MS = 10 * 60 * 1000;
 const GCM_NONCE_LENGTH = 12;
 const GCM_TAG_LENGTH = 16;
+const HTTP_REQUEST_TIMEOUT = 408;
 const HTTP_UNPROCESSABLE = 422;
+const HTTP_TOO_MANY_REQUESTS = 429;
+
+/** A 4xx that means Proton will never release this fork; 422 means the user has not signed in yet. */
+function isForkRejection(status: number): boolean {
+	return status >= 400 && status < 500 &&
+		status !== HTTP_REQUEST_TIMEOUT && status !== HTTP_UNPROCESSABLE && status !== HTTP_TOO_MANY_REQUESTS;
+}
 
 function toBase64(bytes: Uint8Array): string {
 	let binary = "";
@@ -56,11 +63,17 @@ function parsePendingFork(raw: string | null): PendingFork | null {
 	}
 }
 
+export interface ForkStart {
+	readonly signInUrl: string;
+	readonly expiresAtMs: number;
+}
+
 /**
  * Open a session fork and return the account-page URL the user signs in on. The
- * account page (not Air Sync) collects the password, 2FA and any CAPTCHA.
+ * account page (not Air Sync) collects the password, 2FA and any CAPTCHA. The
+ * new fork replaces any pending one.
  */
-export async function beginFork(transport: ProtonTransport, secrets: BackendSecretStore, nowMs: number): Promise<string> {
+export async function beginFork(transport: ProtonTransport, secrets: BackendSecretStore, nowMs: number): Promise<ForkStart> {
 	const response = await transport.json("GET", "auth/v4/sessions/forks");
 	const selector = response.Selector;
 	const userCode = response.UserCode;
@@ -71,7 +84,17 @@ export async function beginFork(transport: ProtonTransport, secrets: BackendSecr
 	const pending: PendingFork = { selector: selector as ForkSelector, key, expiresAtMs: nowMs + FORK_MAX_POLL_TIME_MS };
 	await secrets.set(FORK_SECRET_KEY, JSON.stringify(pending));
 	const payload = `0:${userCode}:${key}:${PROTON_AUTH_CLIENT_ID}`;
-	return `${PROTON_ACCOUNT_BASE}/desktop/login?app=drive&pv=3#payload=${encodeURIComponent(payload)}`;
+	return {
+		signInUrl: `${PROTON_ACCOUNT_BASE}/desktop/login?app=drive&pv=3#payload=${encodeURIComponent(payload)}`,
+		expiresAtMs: pending.expiresAtMs,
+	};
+}
+
+/** Delete the stored fork only if it is still `fork`. */
+async function discardFork(secrets: BackendSecretStore, fork: PendingFork): Promise<void> {
+	if (parsePendingFork(await secrets.get(FORK_SECRET_KEY))?.selector === fork.selector) {
+		await secrets.delete(FORK_SECRET_KEY);
+	}
 }
 
 async function decryptKeyPassword(key: ForkKey, payload: string): Promise<KeyPassword> {
@@ -94,36 +117,44 @@ export interface ForkClock {
 	sleep(ms: number): Promise<void>;
 }
 
-/** Poll the fork started by {@link beginFork} until the user finishes signing in, then consume it. */
+/**
+ * Poll the stored fork until the user finishes signing in, then consume it. Each poll re-reads
+ * the fork, so a sign-in restarted meanwhile is the one polled. The fork is deleted once Proton
+ * releases it, on expiry, or when Proton rejects it; any other failure keeps it.
+ */
 export async function completeFork(
 	transport: ProtonTransport,
 	secrets: BackendSecretStore,
 	clock: ForkClock,
 ): Promise<ProtonSession> {
-	const pending = parsePendingFork(await secrets.get(FORK_SECRET_KEY));
-	if (!pending) failBackend("auth", "No Proton sign-in is in progress. Click Connect again.");
-	await clock.sleep(FORK_INITIAL_DELAY_MS);
-	try {
-		for (;;) {
-			if (clock.now() > pending.expiresAtMs) failBackend("auth", "Proton sign-in timed out. Click Connect again.");
-			let response;
-			try {
-				response = await transport.json("GET", `auth/v4/sessions/forks/${encodeURIComponent(pending.selector)}`);
-			} catch (err) {
-				if (err instanceof ProtonApiError && err.status === HTTP_UNPROCESSABLE) {
-					await clock.sleep(FORK_POLL_INTERVAL_MS);
-					continue;
-				}
-				throw err;
-			}
-			const tokens = parseSessionTokens(response);
-			if (!tokens || typeof response.Payload !== "string") {
-				failBackend("permanent", "Proton returned an incomplete session");
-			}
-			const keyPassword = await decryptKeyPassword(pending.key, response.Payload);
-			return { ...tokens, keyPassword };
+	for (;;) {
+		const pending = parsePendingFork(await secrets.get(FORK_SECRET_KEY));
+		if (!pending) failBackend("auth", "No Proton sign-in is in progress. Click Connect again.");
+		if (clock.now() > pending.expiresAtMs) {
+			await discardFork(secrets, pending);
+			failBackend("auth", "Proton sign-in timed out. Click Connect again.");
 		}
-	} finally {
-		await secrets.delete(FORK_SECRET_KEY);
+		let response;
+		try {
+			response = await transport.json("GET", `auth/v4/sessions/forks/${encodeURIComponent(pending.selector)}`);
+		} catch (err) {
+			if (!(err instanceof ProtonApiError)) throw err;
+			if (err.status === HTTP_UNPROCESSABLE) {
+				await clock.sleep(FORK_POLL_INTERVAL_MS);
+				continue;
+			}
+			if (isForkRejection(err.status)) {
+				await discardFork(secrets, pending);
+				failBackend("auth", `Proton rejected the sign-in (${err.message}). Click Connect again.`);
+			}
+			throw err;
+		}
+		await discardFork(secrets, pending);
+		const tokens = parseSessionTokens(response);
+		if (!tokens || typeof response.Payload !== "string") {
+			failBackend("permanent", "Proton returned an incomplete session");
+		}
+		const keyPassword = await decryptKeyPassword(pending.key, response.Payload);
+		return { ...tokens, keyPassword };
 	}
 }

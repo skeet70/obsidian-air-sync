@@ -99,6 +99,44 @@ describe("renderBackendSettings", () => {
 		expect(__ui.texts.at(-1)?.name).toBe("Client secret name");
 	});
 
+	it("persists a text-field keystroke without re-rendering the section, so the input keeps focus", async () => {
+		const empty = vi.fn();
+		const parent = { createDiv: () => ({ empty }) } as unknown as HTMLElement;
+		const { settingsHost, setValue, read } = host({ authMode: true });
+		renderBackendSettings(parent, definition, settingsHost);
+		const rendered = __ui.texts.length;
+		empty.mockClear();
+
+		const clientId = __ui.texts.find((t) => t.name === "Client ID");
+		await clientId?.change("a");
+		await clientId?.change("ab");
+		await flush();
+		clientId?.blur();
+
+		expect(setValue).toHaveBeenLastCalledWith("clientId", "ab");
+		expect(read().clientId).toBe("ab");
+		expect(empty).not.toHaveBeenCalled();
+		expect(__ui.texts).toHaveLength(rendered);
+	});
+
+	it("re-renders on blur when the typed value changed which fields are visible", async () => {
+		const gated: BackendSettingsDefinition = {
+			fields: [
+				{ key: "region", label: "Region", type: "text" },
+				{ key: "euOnly", label: "EU only", type: "toggle", visibleWhen: { field: "region", equals: "eu" } },
+			],
+		};
+		const { settingsHost } = host({});
+		renderBackendSettings(container(), gated, settingsHost);
+
+		await __ui.texts[0]?.change("eu");
+		await flush();
+		expect(__ui.toggles).toHaveLength(0);
+
+		__ui.texts[0]?.blur();
+		expect(__ui.toggles.map((t) => t.name)).toEqual(["EU only"]);
+	});
+
 	it("renders a secret reference as a non-secret text field", () => {
 		const { settingsHost } = host({ authMode: true, clientSecret: "my-ref" });
 		renderBackendSettings(container(), definition, settingsHost);

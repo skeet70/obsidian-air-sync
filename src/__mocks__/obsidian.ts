@@ -58,8 +58,11 @@ export const __ui: {
 	texts: {
 		name: string;
 		description: string;
+		placeholder: string;
+		disabled: boolean;
 		value: string;
 		change: (value: string) => unknown;
+		blur: () => void;
 	}[];
 	toggles: {
 		name: string;
@@ -92,6 +95,9 @@ export class Modal {
 	private _contentEl = new FakeEl();
 	constructor(app: unknown) {
 		this.app = app;
+	}
+	setTitle(_title: string): this {
+		return this;
 	}
 	open() {
 		// Each open starts from a clean button list, so __ui.buttons always
@@ -144,14 +150,28 @@ export class Setting {
 	}
 	addText(cb: (t: unknown) => unknown) {
 		let value = "";
+		let placeholder = "";
+		let disabled = false;
 		let handler: (next: string) => unknown = () => {};
+		const blurHandlers: (() => void)[] = [];
 		const text = {
-			setPlaceholder: (_placeholder: string) => text,
+			inputEl: {
+				addEventListener: (type: string, listener: () => void) => {
+					if (type === "blur") blurHandlers.push(listener);
+				},
+			},
+			setPlaceholder: (next: string) => {
+				placeholder = next;
+				return text;
+			},
 			setValue: (next: string) => {
 				value = next;
 				return text;
 			},
-			setDisabled: (_disabled: boolean) => text,
+			setDisabled: (next: boolean) => {
+				disabled = next;
+				return text;
+			},
 			onChange: (next: (value: string) => unknown) => {
 				handler = next;
 				return text;
@@ -161,8 +181,11 @@ export class Setting {
 		__ui.texts.push({
 			name: this._name,
 			description: this._description,
+			get placeholder() { return placeholder; },
+			get disabled() { return disabled; },
 			get value() { return value; },
 			change: (next: string) => handler(next),
+			blur: () => { for (const listener of blurHandlers) listener(); },
 		});
 		return this;
 	}

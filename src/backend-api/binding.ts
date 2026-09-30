@@ -69,8 +69,8 @@ export interface BackendBinding {
 
 	/**
 	 * List the folder names directly under the picker root, for the core in-app folder
-	 * picker. Declaring it gives the module that picker: the pick is written to
-	 * `pendingPickedFolderPath` and bound through {@link resolveDefault}. Core renders
+	 * picker. Declaring it gives the module that picker, which writes the pick to config
+	 * (see {@link appRoot}) and binds it through {@link resolveDefault}. Core renders
 	 * the modal; this only returns facts.
 	 */
 	listAppRootFolders?(
@@ -79,16 +79,22 @@ export interface BackendBinding {
 	): Promise<readonly string[]>;
 
 	/**
-	 * How the in-app picker describes its root. A module declaring it accepts a
-	 * `/`-separated nested `pendingPickedFolderPath`. Omitted: the root is the provider's
-	 * app folder and the unpicked default is `/<vault>`.
+	 * Where the module's vault folder lives when it is not the provider's app folder.
+	 * A module declaring it reads a `/`-separated nested path under the root from
+	 * {@link APP_ROOT_FOLDER_PATH_KEY}, which core's "Remote folder" row and in-app
+	 * picker write, and binds it through {@link resolveDefault}. Omitted: the root is
+	 * the provider's app folder, the pick goes to `pendingPickedFolderPath`, and the
+	 * unpicked default is `/<vault>`.
 	 */
 	readonly appRoot?: BackendAppRoot;
 }
 
+/** The config key holding an {@link BackendAppRoot} module's folder path under its root. */
+export const APP_ROOT_FOLDER_PATH_KEY = "folderPath";
+
 export interface BackendAppRoot {
 	/** Shown to the user, e.g. "My files". */
 	readonly name: string;
-	/** The folder {@link BackendBinding.resolveDefault} binds when nothing was picked, relative to the root. */
+	/** The folder {@link BackendBinding.resolveDefault} binds when {@link APP_ROOT_FOLDER_PATH_KEY} is empty, relative to the root. */
 	defaultFolderPath(vaultName: string): string;
 }

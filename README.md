@@ -1,5 +1,8 @@
 # Air Sync
 
+
+> Note: as a fork this cannot be installed from the community plugins list. You'll need to check this repo out, run `npm install && npm run build`, then copy `main.js`, `manifest.json`, and `styles.css` into `your-vault/.obsidian/plugins/air-sync`.
+
 **Like air, sync should simply be there.**
 
 Open Obsidian on any device and keep going.
@@ -91,7 +94,7 @@ See the **[custom app setup guide](docs/custom-apps.md)** for what each backend 
 - **"Authorization failed" right after approving access**: The token exchange needs a working connection immediately after you approve access. Check that the device is online, then click **Connect** and approve access again.
 - **The browser didn't return to Obsidian after approving access**: You aren't connected yet, so there's nothing to disconnect — just click **Connect** in the plugin settings to start the flow again.
 - **"Authentication expired. Please reconnect in settings."**: Your saved authorization is no longer valid (for example access was revoked, or a refresh token expired). Open **Settings → Air Sync** and reconnect.
-- **Proton Drive: Connect opens Proton's sign-in page and seems to wait**: Sign in on that page, then return to Obsidian. Air Sync finishes connecting on its own within a few seconds; the sign-in link expires after 10 minutes.
+- **Proton Drive: Connect opens Proton's sign-in page and seems to wait**: Sign in on that page, then return to Obsidian. Air Sync finishes connecting on its own within a few seconds, even if Obsidian was closed or suspended in the meantime (on Android it picks the sign-in up again when you return to Obsidian or restart it). The sign-in link expires after 10 minutes; press Connect again for a fresh one. To sync into a specific folder in My files, type its path in **Remote folder** before pressing Connect: the vault is then bound to that folder as soon as sign-in finishes.
 
 ## Privacy & network use
 
@@ -100,7 +103,7 @@ Air Sync connects only to the cloud storage you choose, to sync your files:
 - **Google Drive** — `googleapis.com` for sync; sign-in happens on `accounts.google.com`, and a small auth server (`auth-airsync.takezo.dev`) performs the sign-in token exchange.
 - **OneDrive** — `graph.microsoft.com` for sync; sign-in happens on `login.microsoftonline.com` and returns directly to Obsidian (no relay or picker page — the folder is chosen in-app).
 - **Dropbox** — `api.dropboxapi.com` / `content.dropboxapi.com` for sync; sign-in happens on `dropbox.com` and returns directly to Obsidian (no relay or picker page — the folder is chosen in-app).
-- **Proton Drive** (unofficial, not affiliated with Proton AG): `drive-api.proton.me` for sync through Proton's official Drive SDK; sign-in happens on `account.proton.me`. Files are encrypted and decrypted on your device. The folder is chosen in-app: the default `obsidian-air-sync/<vault>`, or any folder in My files.
+- **Proton Drive** (unofficial, not affiliated with Proton AG): `drive-api.proton.me` for sync through Proton's official Drive SDK; sign-in happens on `account.proton.me`. Files are encrypted and decrypted on your device. The folder is chosen in-app in **Remote folder**: type a path in My files before or after connecting, leave it empty for the default `obsidian-air-sync/<vault>`, or, once connected, pick one with **Choose folder**.
 
 Your vault data is sent only to your chosen storage provider — never to the auth, redirect, or picker pages.
 

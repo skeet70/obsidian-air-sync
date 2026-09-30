@@ -6,7 +6,13 @@ import type {
 	JsonObject,
 	RemoteBackendAdapter,
 } from "../../backend-api";
-import { BACKEND_MODULE_API_VERSION, REMOTE_VAULT_ROOT, sleep } from "../../backend-api";
+import {
+	APP_ROOT_FOLDER_PATH_KEY,
+	BACKEND_MODULE_API_VERSION,
+	REMOTE_VAULT_ROOT,
+	errorMessage,
+	sleep,
+} from "../../backend-api";
 import { failBackend } from "../shared/error-shape";
 import { asString, resolveFolderTarget } from "../shared/module-utils";
 import { ProtonDriveAdapter } from "./adapter";
@@ -23,13 +29,17 @@ function clientUidOf(config: Readonly<JsonObject>): ClientUid {
 	return (asString(config.clientUid) || `air-sync-${crypto.randomUUID()}`) as ClientUid;
 }
 
+function configuredFolderPath(config: Readonly<JsonObject>): string {
+	return asString(config[APP_ROOT_FOLDER_PATH_KEY]).trim();
+}
+
 const auth: BackendAuth = {
 	credentialKeys: [SESSION_SECRET_KEY],
 	completion: "poll",
 	start: async (context) => {
-		const signInUrl = await beginFork(new ProtonTransport(context.http, null), context.secrets, Date.now());
-		await context.auth.openExternal(signInUrl);
-		return {};
+		const fork = await beginFork(new ProtonTransport(context.http, null), context.secrets, Date.now());
+		await context.auth.openExternal(fork.signInUrl);
+		return { set: { pendingAuthState: String(fork.expiresAtMs) } };
 	},
 	complete: async (context, _input, config) => {
 		const session = await completeFork(new ProtonTransport(context.http, null), context.secrets, {
@@ -37,7 +47,21 @@ const auth: BackendAuth = {
 			sleep,
 		});
 		await saveSession(context.secrets, session);
-		return { set: { clientUid: clientUidOf(config) } };
+		const clientUid = clientUidOf(config);
+		const folderPath = configuredFolderPath(config);
+		const set: JsonObject = { clientUid };
+		if (folderPath) {
+			// A folder failure leaves the vault unbound; the signed-in session stays.
+			try {
+				const { drive } = await openProtonDrive(context, clientUid);
+				set.remoteVaultFolderId = (await findOrCreateFolderPath(drive, parseFolderPath(folderPath))).uid;
+			} catch (err) {
+				context.logger.error(`Signed in, but the Proton Drive folder "${folderPath}" could not be bound`, {
+					message: errorMessage(err),
+				});
+			}
+		}
+		return { set, unset: ["pendingAuthState"] };
 	},
 	revoke: async (context) => {
 		const session = await SessionHandle.open(context.secrets).catch(() => null);
@@ -50,14 +74,16 @@ const binding: BackendBinding = {
 	resolveDefault: async (context, config, vaultName): Promise<BindingResult> => {
 		const existing = asString(config.remoteVaultFolderId);
 		if (existing) return { patch: {}, target: { id: existing } };
-		const picked = asString(config.pendingPickedFolderPath).trim();
+		const configured = configuredFolderPath(config);
 		const name = vaultName.trim();
-		if (!picked && !name) failBackend("permanent", "Cannot resolve the Proton Drive remote vault: the vault name is empty.");
-		const path = parseFolderPath(picked || `${REMOTE_VAULT_ROOT}/${name}`);
+		if (!configured && !name) {
+			failBackend("permanent", "Cannot resolve the Proton Drive remote vault: the vault name is empty.");
+		}
+		const path = parseFolderPath(configured || `${REMOTE_VAULT_ROOT}/${name}`);
 		const { drive } = await openProtonDrive(context, clientUidOf(config));
 		const vault = await findOrCreateFolderPath(drive, path);
 		return {
-			patch: { set: { remoteVaultFolderId: vault.uid, pendingPickedFolderPath: "" } },
+			patch: { set: { remoteVaultFolderId: vault.uid } },
 			target: { id: vault.uid },
 		};
 	},
@@ -91,7 +117,10 @@ export const protonDriveModule: BackendModule = {
 	auth,
 	binding,
 	getTarget: resolveFolderTarget,
-	disconnectConfig: () => ({}),
+	disconnectConfig: (config): JsonObject => {
+		const folderPath = configuredFolderPath(config);
+		return folderPath ? { [APP_ROOT_FOLDER_PATH_KEY]: folderPath } : {};
+	},
 	createAdapter: async (context, config, target): Promise<RemoteBackendAdapter> =>
 		new ProtonDriveAdapter((await openProtonDrive(context, clientUidOf(config))).drive, target.id as NodeUid),
 };

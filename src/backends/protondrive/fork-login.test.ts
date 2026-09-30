@@ -77,7 +77,7 @@ describe("Proton session-fork sign-in", () => {
 		};
 		const transport = new ProtonTransport(http, null);
 
-		const signInUrl = await beginFork(transport, secrets, 0);
+		const { signInUrl } = await beginFork(transport, secrets, 0);
 		const session = await completeFork(transport, secrets, clock);
 
 		expect(signInUrl).toMatch(/^https:\/\/account\.proton\.me\/desktop\/login\?app=drive&pv=3#payload=0%3ACODE%3A.+%3Aexternal-drive$/);
@@ -105,6 +105,77 @@ describe("Proton session-fork sign-in", () => {
 			completeFork(transport, secrets, { now: () => now, sleep: () => Promise.resolve(void (now += 60_000)) }),
 		).rejects.toMatchObject({ kind: "auth" });
 		expect(secrets.values.has(FORK_SECRET_KEY)).toBe(false);
+	});
+
+	it("keeps the fork across a transient poll failure so a later call completes the sign-in", async () => {
+		const secrets = memorySecrets();
+		let pollStatus = 503;
+		const http: BackendHttpClient = {
+			request: async (request) => {
+				if (request.url.endsWith("/auth/v4/sessions/forks")) {
+					return reply(200, { Code: 1000, Selector: "SEL", UserCode: "CODE" });
+				}
+				if (pollStatus !== 200) return reply(pollStatus, { Code: 0, Error: "unavailable" });
+				const pending = JSON.parse(secrets.values.get(FORK_SECRET_KEY) ?? "{}") as { key: string };
+				return reply(200, { Code: 1000, UID: "UID", AccessToken: "AT", RefreshToken: "RT", Payload: await encryptPayload(pending.key, "kp") });
+			},
+		};
+		const transport = new ProtonTransport(http, null);
+		await beginFork(transport, secrets, 0);
+
+		await expect(completeFork(transport, secrets, clock)).rejects.toThrow();
+		expect(secrets.values.has(FORK_SECRET_KEY)).toBe(true);
+
+		pollStatus = 200;
+		await expect(completeFork(transport, secrets, clock)).resolves.toMatchObject({ uid: "UID", keyPassword: "kp" });
+		expect(secrets.values.has(FORK_SECRET_KEY)).toBe(false);
+	});
+
+	it("forgets a fork Proton rejects", async () => {
+		const secrets = memorySecrets();
+		const http: BackendHttpClient = {
+			request: (request) =>
+				Promise.resolve(
+					request.url.endsWith("/auth/v4/sessions/forks")
+						? reply(200, { Code: 1000, Selector: "SEL", UserCode: "CODE" })
+						: reply(400, { Code: 2001, Error: "Invalid selector" }),
+				),
+		};
+		const transport = new ProtonTransport(http, null);
+		await beginFork(transport, secrets, 0);
+
+		await expect(completeFork(transport, secrets, clock)).rejects.toMatchObject({ kind: "auth" });
+		expect(secrets.values.has(FORK_SECRET_KEY)).toBe(false);
+	});
+
+	it("polls the sign-in restarted while it was waiting", async () => {
+		const secrets = memorySecrets();
+		const polled: string[] = [];
+		let forks = 0;
+		const http: BackendHttpClient = {
+			request: async (request) => {
+				if (request.url.endsWith("/auth/v4/sessions/forks")) {
+					forks++;
+					return reply(200, { Code: 1000, Selector: `SEL${forks}`, UserCode: "CODE" });
+				}
+				polled.push(request.url.slice(request.url.lastIndexOf("/") + 1));
+				if (forks < 2) return reply(422, { Code: 2501 });
+				const pending = JSON.parse(secrets.values.get(FORK_SECRET_KEY) ?? "{}") as { key: string };
+				return reply(200, { Code: 1000, UID: "UID", AccessToken: "AT", RefreshToken: "RT", Payload: await encryptPayload(pending.key, "kp") });
+			},
+		};
+		const transport = new ProtonTransport(http, null);
+		await beginFork(transport, secrets, 0);
+
+		const session = await completeFork(transport, secrets, {
+			now: () => 0,
+			sleep: async () => {
+				await beginFork(transport, secrets, 0);
+			},
+		});
+
+		expect(session.keyPassword).toBe("kp");
+		expect(polled).toEqual(["SEL1", "SEL2"]);
 	});
 
 	it("requires a started sign-in", async () => {

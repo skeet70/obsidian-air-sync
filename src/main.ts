@@ -189,6 +189,11 @@ export default class AirSyncPlugin extends Plugin {
 		// Initialize backend if configured
 		await this.backendManager.initBackend();
 
+		// A poll-completed sign-in stalls while Obsidian is backgrounded on mobile.
+		this.registerDomEvent(document, "visibilitychange", () => {
+			if (document.visibilityState === "visible") void this.backendManager.resumePendingAuth();
+		});
+
 		// Commands
 		this.addCommand({
 			id: "sync-now",

@@ -1192,3 +1192,73 @@ describe("BackendManager — poll-completed auth", () => {
 		expect(deps.notify).toHaveBeenCalledWith("Connection failed: no network");
 	});
 });
+
+describe("BackendManager — resuming a pending poll sign-in", () => {
+	function pendingManager(options: { completion?: "poll"; credentials?: boolean; marker?: string }) {
+		const settings = mockSettings();
+		settings.backendType = "test";
+		settings.backendData = options.marker === undefined ? {} : { pendingAuthState: options.marker };
+		const completeAuth = vi.fn().mockResolvedValue({});
+		fakeProvider = {
+			...fakeProvider,
+			auth: { startAuth: vi.fn().mockResolvedValue({}), completeAuth, completion: options.completion },
+			hasCredentials: () => options.credentials ?? false,
+			isConnected: () => false,
+			getIdentity: () => null,
+			createFs: () => null,
+		};
+		const deps = createDeps(settings);
+		return { mgr: new BackendManager(deps), deps, settings, completeAuth };
+	}
+
+	it("completes the sign-in when the marker is set and credentials are absent", async () => {
+		const { mgr, deps, completeAuth } = pendingManager({ completion: "poll", marker: "1700000000000" });
+
+		await mgr.resumePendingAuth();
+
+		expect(completeAuth).toHaveBeenCalledWith("", expect.anything());
+		expect(deps.notify).toHaveBeenCalledWith("Connected to Test — choose a remote folder to start syncing");
+	});
+
+	it("resumes from initBackend at start-up", async () => {
+		const { mgr, completeAuth } = pendingManager({ completion: "poll", marker: "1" });
+
+		await mgr.initBackend();
+		await vi.waitFor(() => expect(completeAuth).toHaveBeenCalledTimes(1));
+	});
+
+	it("does nothing when credentials exist, when no sign-in is pending, or for a callback provider", async () => {
+		for (const options of [
+			{ completion: "poll", credentials: true, marker: "1" },
+			{ completion: "poll", marker: "" },
+			{ completion: "poll" },
+			{ marker: "1" },
+		] as const) {
+			const { mgr, completeAuth } = pendingManager(options);
+
+			await mgr.resumePendingAuth();
+
+			expect(completeAuth).not.toHaveBeenCalled();
+		}
+	});
+
+	it("keeps the marker and stays quiet when the poll fails transiently", async () => {
+		const { mgr, deps, settings, completeAuth } = pendingManager({ completion: "poll", marker: "1" });
+		completeAuth.mockRejectedValue(backendError("transient", "offline"));
+
+		await mgr.resumePendingAuth();
+
+		expect(settings.backendData.pendingAuthState).toBe("1");
+		expect(deps.notify).not.toHaveBeenCalled();
+	});
+
+	it("clears the marker and notifies when the sign-in definitively failed", async () => {
+		const { mgr, deps, settings, completeAuth } = pendingManager({ completion: "poll", marker: "1" });
+		completeAuth.mockRejectedValue(backendError("auth", "Proton sign-in timed out. Click Connect again."));
+
+		await mgr.resumePendingAuth();
+
+		expect(settings.backendData).not.toHaveProperty("pendingAuthState");
+		expect(deps.notify).toHaveBeenCalledWith("Authorization failed: Proton sign-in timed out. Click Connect again.");
+	});
+});

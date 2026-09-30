@@ -61,6 +61,7 @@ export type {
 export type { BackendAuth, BackendAuthCompletion } from "./auth";
 
 export type { BackendTarget, JsonPatch, BindingResult, BackendBinding, BackendAppRoot } from "./binding";
+export { APP_ROOT_FOLDER_PATH_KEY } from "./binding";
 
 export type {
 	BackendSettingField,

@@ -15,10 +15,7 @@ export interface AppFolderPickerProvider {
 
 /**
  * Shown for a module declaring `binding.listAppRootFolders`. Lists the folders directly
- * under the picker root and lets the user pick an existing one or type a new name. On
- * confirm it writes the choice to `pendingPickedFolderPath` via `onSave`, then runs
- * `bindDefault`, so the module's `resolveDefault` find-or-creates that folder and binds
- * its id.
+ * under the picker root and lets the user pick an existing one or type a new name.
  *
  * `rootName` names a picker root other than the provider's app folder; the text field
  * then takes a `/`-separated path under it.
@@ -33,8 +30,7 @@ export class AppFolderPickerModal extends Modal {
 		private rootName: string | undefined,
 		private provider: AppFolderPickerProvider,
 		private settings: AirSyncSettings,
-		private onSave: (updates: Record<string, unknown>) => Promise<void>,
-		private bindDefault: () => Promise<void>,
+		private onPick: (folderPath: string) => Promise<void>,
 	) {
 		super(app);
 	}
@@ -100,10 +96,7 @@ export class AppFolderPickerModal extends Modal {
 			return;
 		}
 		this.close();
-		// Queue the chosen name, then trigger the default-bind action: the module's
-		// resolveDefault find-or-creates it and binds its id.
-		await this.onSave({ pendingPickedFolderPath: name });
-		await this.bindDefault();
+		await this.onPick(name);
 	}
 
 	onClose(): void {

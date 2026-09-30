@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { __ui } from "../__mocks__/obsidian";
 import { BackendModuleSettingsRenderer } from "./backend-module-provider-settings";
 import type { BackendModuleProvider } from "../fs/modules/backend-module-provider";
@@ -13,6 +13,7 @@ vi.mock("obsidian");
 
 beforeEach(() => {
 	__ui.buttons = [];
+	__ui.texts = [];
 	__ui.notices = [];
 });
 
@@ -44,17 +45,18 @@ function customAppRenderer(
 	return new BackendModuleSettingsRenderer(provider);
 }
 
-function actionsSpy(): { actions: BackendConnectionActions; startAuth: ReturnType<typeof vi.fn> } {
+function actionsSpy(): { actions: BackendConnectionActions; startAuth: Mock; bindDefaultFolder: Mock } {
 	const startAuth = vi.fn().mockResolvedValue(undefined);
+	const bindDefaultFolder = vi.fn().mockResolvedValue(undefined);
 	const actions = {
 		startAuth,
 		completeAuth: vi.fn().mockResolvedValue(undefined),
 		disconnect: vi.fn().mockResolvedValue(undefined),
 		refreshDisplay: vi.fn(),
 		startFolderPick: vi.fn().mockResolvedValue(undefined),
-		bindDefaultFolder: vi.fn().mockResolvedValue(undefined),
+		bindDefaultFolder,
 	} as unknown as BackendConnectionActions;
-	return { actions, startAuth };
+	return { actions, startAuth, bindDefaultFolder };
 }
 
 function connectButton(): { name: string; click: () => void } {
@@ -151,15 +153,6 @@ describe("BackendModuleSettingsRenderer — in-app folder picker", () => {
 	const resolveDefault: BackendBinding["resolveDefault"] = () =>
 		Promise.resolve({ patch: {}, target: { id: "root" } });
 
-	it("offers the picker to a module declaring listAppRootFolders, labelled with its app-root default", () => {
-		const labels = renderUnbound({
-			resolveDefault,
-			listAppRootFolders: () => Promise.resolve([]),
-			appRoot: { name: "My files", defaultFolderPath: (vault) => `obsidian-air-sync/${vault}` },
-		});
-		expect(labels).toEqual(["obsidian-air-sync/Personal", "Choose folder"]);
-	});
-
 	it("labels the default /<vault> when the module declares no app root", () => {
 		expect(renderUnbound({ resolveDefault, listAppRootFolders: () => Promise.resolve([]) })).toEqual([
 			"/Personal",
@@ -169,6 +162,94 @@ describe("BackendModuleSettingsRenderer — in-app folder picker", () => {
 
 	it("offers no picker to a module without listAppRootFolders or a web picker", () => {
 		expect(renderUnbound({ resolveDefault })).toEqual(["obsidian-air-sync/Personal"]);
+	});
+});
+
+describe("BackendModuleSettingsRenderer — app-root Remote folder row", () => {
+	const binding: BackendBinding = {
+		resolveDefault: () => Promise.resolve({ patch: {}, target: { id: "root" } }),
+		listAppRootFolders: () => Promise.resolve([]),
+		appRoot: { name: "My files", defaultFolderPath: (vault) => `obsidian-air-sync/${vault}` },
+	};
+
+	function renderRow(opts: { connected: boolean; backendData?: Record<string, unknown> }) {
+		const module = createFakeModule({ binding });
+		const provider = {
+			type: module.id,
+			getModule: () => module,
+			hasCredentials: () => opts.connected,
+			getRemoteVaultDisplayPath: () => Promise.resolve({ path: "/notes/notes" }),
+			createUiClient: () => ({ listAppRootFolders: () => Promise.resolve([{ name: "notes" }]) }),
+		} as unknown as BackendModuleProvider;
+		const settings = mockSettings({ backendType: module.id, backendData: opts.backendData ?? {} });
+		const onSave = (updates: Record<string, unknown>): Promise<void> => {
+			settings.backendData = { ...settings.backendData, ...updates };
+			return Promise.resolve();
+		};
+		const { actions, bindDefaultFolder } = actionsSpy();
+		new BackendModuleSettingsRenderer(provider).render(
+			container(),
+			settings,
+			onSave,
+			actions,
+			{ vault: { getName: () => "Personal" } } as never,
+		);
+		const row = __ui.texts.find((text) => text.name === "Remote folder");
+		const rowButtons = __ui.buttons.filter((button) => button.name === "Remote folder");
+		return { row, rowButtons, settings, bindDefaultFolder };
+	}
+
+	it("unbound and connected: an input with the default as placeholder, Choose folder and Use this folder", async () => {
+		const { row, rowButtons, settings, bindDefaultFolder } = renderRow({ connected: true });
+
+		expect(row?.placeholder).toBe("obsidian-air-sync/Personal");
+		expect(row?.disabled).toBe(false);
+		expect(row?.description).toBe("Folder path in My files. Leave empty for the default.");
+		expect(rowButtons.map((button) => button.label)).toEqual(["Choose folder", "Use this folder"]);
+		expect(__ui.buttons.some((button) => button.name === "Remote vault folder")).toBe(false);
+
+		await row?.change("notes/notes");
+		rowButtons.find((button) => button.label === "Use this folder")?.click();
+
+		await vi.waitFor(() => expect(bindDefaultFolder).toHaveBeenCalledTimes(1));
+		expect(settings.backendData.folderPath).toBe("notes/notes");
+	});
+
+	it("the picker writes the chosen path to the folder-path key and binds it", async () => {
+		const { rowButtons, settings, bindDefaultFolder } = renderRow({ connected: true, backendData: { folderPath: "old" } });
+
+		rowButtons.find((button) => button.label === "Choose folder")?.click();
+		const modalPath = await vi.waitFor(() => {
+			const text = __ui.texts.find((candidate) => candidate.name === "Folder path");
+			if (!text) throw new Error("picker not open yet");
+			return text;
+		});
+		await modalPath.change("notes/work");
+		__ui.buttons.find((button) => button.label === "Use this folder")?.click();
+
+		await vi.waitFor(() => expect(bindDefaultFolder).toHaveBeenCalledTimes(1));
+		expect(settings.backendData.folderPath).toBe("notes/work");
+		expect(settings.backendData).not.toHaveProperty("pendingPickedFolderPath");
+	});
+
+	it("not connected: the input shows the stored path and no bind buttons", async () => {
+		const { row, rowButtons, settings } = renderRow({ connected: false, backendData: { folderPath: "notes/notes" } });
+
+		expect(row?.value).toBe("notes/notes");
+		expect(row?.placeholder).toBe("obsidian-air-sync/Personal");
+		expect(rowButtons).toEqual([]);
+
+		await row?.change("notes");
+		expect(settings.backendData.folderPath).toBe("notes");
+	});
+
+	it("bound: shows the bound path read-only and says to disconnect to change it", async () => {
+		const { row, rowButtons } = renderRow({ connected: true, backendData: { rootId: "folder-1", folderPath: "notes/notes" } });
+
+		await vi.waitFor(() => expect(row?.value).toBe("/notes/notes"));
+		expect(row?.disabled).toBe(true);
+		expect(row?.description).toContain("Disconnect to change it");
+		expect(rowButtons).toEqual([]);
 	});
 });
 

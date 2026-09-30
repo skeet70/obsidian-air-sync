@@ -6,6 +6,7 @@ import type { Logger } from "../logging/logger";
 import { getBackendProvider, getAllBackendProviders } from "./registry";
 import { errorMessage, isAuthFailure } from "../backend-api/error-classification";
 import { completeAuthFolderPick } from "./backend-auth-folder-pick";
+import { hasPendingPollSignIn, isResumablePollFailure } from "./pending-auth";
 
 export interface BackendManagerDeps {
 	getSettings: () => AirSyncSettings;
@@ -119,6 +120,8 @@ export class BackendManager {
 			}
 		} finally {
 			this.connecting = false;
+			// In `finally` so the not-connected early return also resumes.
+			void this.resumePendingAuth();
 		}
 
 		// A freshly built remote FS means a bind (or a startup restore) just made
@@ -324,6 +327,18 @@ export class BackendManager {
 		}
 	}
 
+	/**
+	 * Resume a poll-completed sign-in the user started earlier, e.g. after Obsidian was
+	 * suspended or reloaded while the user signed in in the browser.
+	 */
+	async resumePendingAuth(): Promise<void> {
+		const settings = this.deps.getSettings();
+		const provider = this.backendProvider ?? getBackendProvider(settings.backendType) ?? null;
+		if (!provider || !hasPendingPollSignIn(provider, settings)) return;
+		this.backendProvider = provider;
+		await this.completeBackendConnect("");
+	}
+
 	/** Complete the auth flow with a code/token from the user */
 	async completeBackendConnect(code: string): Promise<void> {
 		if (this.connecting) return;
@@ -335,12 +350,14 @@ export class BackendManager {
 		const settings = this.deps.getSettings();
 		this.connecting = true;
 		const provider = this.backendProvider;
+		let authCompleted = false;
 
 		try {
 			// `completeAuth` commits its patch (clears the pending flow state, records the
 			// token expiry) to the live bag itself; re-read AFTER the await so the
 			// pre-await snapshot cannot restore the flow state it just cleared.
 			const updates = await provider.auth.completeAuth(code, settings.backendData);
+			authCompleted = true;
 			settings.backendData = { ...settings.backendData, ...updates };
 			await this.deps.saveSettings();
 
@@ -395,8 +412,16 @@ export class BackendManager {
 				: `Connected to ${this.backendProvider.displayName} — choose a remote folder to start syncing`);
 		} catch (err) {
 			const msg = errorMessage(err);
-			this.deps.getLogger().error("Authorization failed", { message: msg });
-			this.deps.notify(`Authorization failed: ${msg}`);
+			const resumable = !authCompleted && isResumablePollFailure(provider, err);
+			this.deps.getLogger().error("Authorization failed", { message: msg, resumable });
+			// A resumable failure keeps the marker, so the next foreground or start-up retries it.
+			if (!resumable) {
+				if (!authCompleted && provider.auth.completion === "poll") {
+					delete settings.backendData.pendingAuthState;
+					await this.deps.saveSettings();
+				}
+				this.deps.notify(`Authorization failed: ${msg}`);
+			}
 		} finally {
 			this.connecting = false;
 		}

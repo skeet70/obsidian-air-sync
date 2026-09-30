@@ -2,7 +2,7 @@ import type { App } from "../platform/obsidian";
 import { Notice, Setting } from "../platform/obsidian";
 import type { AirSyncSettings } from "../settings";
 import { REMOTE_VAULT_ROOT } from "../backend-api";
-import type { JsonObject } from "../backend-api";
+import type { BackendAppRoot, JsonObject } from "../backend-api";
 import type {
 	BackendConnectionActions,
 	IBackendSettingsRenderer,
@@ -13,6 +13,7 @@ import {
 	renderBoundFolderField,
 	renderConnectionStatus,
 	renderUnboundAppFolderField,
+	renderUnboundAppRootFolderField,
 } from "./backend-settings-ui";
 
 /**
@@ -62,8 +63,47 @@ export class BackendModuleSettingsRenderer implements IBackendSettingsRenderer {
 			onConnect: () => this.guardCustomConnect(settings, actions),
 		});
 
+		const appRoot = module.binding.appRoot;
+		if (appRoot) {
+			this.renderAppRootFolder(containerEl, appRoot, settings, actions, onSave, app, authed);
+			return;
+		}
 		if (!authed) return;
 		this.renderBinding(containerEl, settings, actions, onSave, app);
+	}
+
+	/** The single "Remote folder" row of a module declaring `binding.appRoot`, shown connected or not. */
+	private renderAppRootFolder(
+		containerEl: HTMLElement,
+		appRoot: BackendAppRoot,
+		settings: AirSyncSettings,
+		actions: BackendConnectionActions,
+		onSave: (updates: Record<string, unknown>) => Promise<void>,
+		app: App,
+		connected: boolean,
+	): void {
+		const module = this.provider.getModule();
+		const folderSetting = new Setting(containerEl).setName("Remote folder");
+		const target = module.getTarget(settings.backendData as JsonObject);
+		if (target) {
+			renderBoundFolderField(folderSetting, {
+				desc: `The folder in ${appRoot.name} this vault syncs into. Disconnect to change it.`,
+				folderId: target.id,
+				resolvePath: () => this.provider.getRemoteVaultDisplayPath(settings),
+			});
+			return;
+		}
+		renderUnboundAppRootFolderField(folderSetting, {
+			app,
+			settings,
+			provider: this.provider,
+			rootName: appRoot.name,
+			defaultPath: appRoot.defaultFolderPath(app.vault.getName()),
+			modalTitle: `Choose a ${module.displayName} folder`,
+			connected,
+			onSave,
+			actions,
+		});
 	}
 
 	private renderBinding(
@@ -86,17 +126,13 @@ export class BackendModuleSettingsRenderer implements IBackendSettingsRenderer {
 			return;
 		}
 
-		// A module listing its picker root's folders gets the in-app picker, which binds
-		// the chosen folder through the default-bind action.
+		// The in-app picker binds the chosen folder through the default-bind action.
 		if (module.binding.listAppRootFolders) {
-			const vaultName = app.vault.getName();
-			const appRoot = module.binding.appRoot;
 			renderUnboundAppFolderField(folderSetting, {
 				app,
 				settings,
 				provider: this.provider,
-				defaultLabel: appRoot ? appRoot.defaultFolderPath(vaultName) : `/${vaultName}`,
-				rootName: appRoot?.name,
+				defaultLabel: `/${app.vault.getName()}`,
 				modalTitle: `Choose a ${module.displayName} folder`,
 				onSave,
 				actions,

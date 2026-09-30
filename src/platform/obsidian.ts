@@ -125,14 +125,18 @@ export interface RequestUrlResponse {
 	text: string;
 }
 
-export interface TextComponent {
+interface TextValueComponent {
 	setPlaceholder(value: string): this;
 	setValue(value: string): this;
 	setDisabled(disabled: boolean): this;
 	onChange(callback: (value: string) => unknown): this;
 }
 
-export type TextAreaComponent = TextComponent;
+export interface TextComponent extends TextValueComponent {
+	readonly inputEl: HTMLInputElement;
+}
+
+export type TextAreaComponent = TextValueComponent;
 
 export interface ToggleComponent {
 	setValue(value: boolean): this;
@@ -154,7 +158,7 @@ export interface ButtonComponent {
 	onClick(callback: () => unknown): this;
 }
 
-export type SecretComponent = TextComponent;
+export type SecretComponent = TextValueComponent;
 
 type SecretComponentConstructor = new (app: App, containerEl: HTMLElement) => SecretComponent;
 

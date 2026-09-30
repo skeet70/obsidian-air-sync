@@ -79,7 +79,7 @@ export interface ProtonDriveApi {
 	readEvents(scope: TreeScopeId, since: EventId): Promise<DriveEventRead>;
 	downloadRevision(revision: RevisionUid): Promise<DriveDownload>;
 	createFile(parent: NodeUid, name: string, content: ArrayBuffer, metadata: DriveUploadMetadata): Promise<NodeUid>;
-	/** Upload a new active revision; Proton rejects it if the active revision changed first. */
+	/** Upload a new active revision. The SDK sends the active revision it reads itself as `CurrentRevisionID`. */
 	uploadRevision(file: NodeUid, content: ArrayBuffer, metadata: DriveUploadMetadata): Promise<void>;
 	createFolder(parent: NodeUid, name: string): Promise<DriveNode>;
 	rename(node: NodeUid, name: string): Promise<void>;

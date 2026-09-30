@@ -1,5 +1,6 @@
 import { Setting } from "../platform/obsidian";
 import type { App, TextComponent } from "../platform/obsidian";
+import { APP_ROOT_FOLDER_PATH_KEY } from "../backend-api";
 import type { AirSyncSettings } from "../settings";
 import type { BackendConnectionActions } from "../fs/settings-renderer";
 import type { RemoteVaultDisplay } from "../fs/backend";
@@ -77,10 +78,9 @@ export function renderBoundFolderField(
 }
 
 /**
- * Render the unbound remote-folder field for a module with the in-app picker: a
- * default-folder CTA button and a "Choose folder" button that opens the shared
- * {@link AppFolderPickerModal}. `rootName` names the picker root when it is not the
- * provider's app folder; such a root accepts nested folder paths.
+ * Render the unbound remote-folder field for a module with the in-app picker over the
+ * provider's app folder: a default-folder CTA button and a "Choose folder" button that
+ * opens the shared {@link AppFolderPickerModal}.
  */
 export function renderUnboundAppFolderField(
 	folderSetting: Setting,
@@ -89,15 +89,14 @@ export function renderUnboundAppFolderField(
 		settings: AirSyncSettings;
 		provider: AppFolderPickerProvider | undefined;
 		defaultLabel: string;
-		rootName: string | undefined;
 		modalTitle: string;
 		onSave: (updates: Record<string, unknown>) => Promise<void>;
 		actions: BackendConnectionActions;
 	},
 ): void {
-	const { app, settings, provider, defaultLabel, rootName, modalTitle, onSave, actions } = opts;
+	const { app, settings, provider, defaultLabel, modalTitle, onSave, actions } = opts;
 	folderSetting.setDesc(
-		`Choose where this vault syncs: use the default folder, or pick an existing one inside ${rootName ?? "the app folder"}.`,
+		"Choose where this vault syncs: use the default folder, or pick an existing one inside the app folder.",
 	);
 	folderSetting
 		.addButton((button) =>
@@ -116,15 +115,64 @@ export function renderUnboundAppFolderField(
 				.setButtonText("Choose folder")
 				.onClick(() => {
 					if (!provider) return;
-					new AppFolderPickerModal(
-						app,
-						modalTitle,
-						rootName,
-						provider,
-						settings,
-						onSave,
-						() => actions.bindDefaultFolder(),
-					).open();
+					new AppFolderPickerModal(app, modalTitle, undefined, provider, settings, async (folderPath) => {
+						await onSave({ pendingPickedFolderPath: folderPath });
+						await actions.bindDefaultFolder();
+					}).open();
+				}),
+		);
+}
+
+/**
+ * Render the unbound remote-folder field for a module declaring `binding.appRoot`: a
+ * text input editing {@link APP_ROOT_FOLDER_PATH_KEY}, with the module's default path
+ * as placeholder. Once `connected`, "Choose folder" opens the picker and "Use this
+ * folder" binds the typed path, or the default when it is empty.
+ */
+export function renderUnboundAppRootFolderField(
+	folderSetting: Setting,
+	opts: {
+		app: App;
+		settings: AirSyncSettings;
+		provider: AppFolderPickerProvider;
+		rootName: string;
+		defaultPath: string;
+		modalTitle: string;
+		connected: boolean;
+		onSave: (updates: Record<string, unknown>) => Promise<void>;
+		actions: BackendConnectionActions;
+	},
+): void {
+	const { app, settings, provider, rootName, defaultPath, modalTitle, connected, onSave, actions } = opts;
+	const current = settings.backendData[APP_ROOT_FOLDER_PATH_KEY];
+	folderSetting.setDesc(`Folder path in ${rootName}. Leave empty for the default.`);
+	let saved: Promise<void> = Promise.resolve();
+	folderSetting.addText((text) =>
+		text
+			.setPlaceholder(defaultPath)
+			.setValue(typeof current === "string" ? current : "")
+			.onChange((value) => {
+				saved = onSave({ [APP_ROOT_FOLDER_PATH_KEY]: value });
+			}),
+	);
+	if (!connected) return;
+	folderSetting
+		.addButton((button) =>
+			button.setButtonText("Choose folder").onClick(() => {
+				new AppFolderPickerModal(app, modalTitle, rootName, provider, settings, async (folderPath) => {
+					await onSave({ [APP_ROOT_FOLDER_PATH_KEY]: folderPath });
+					await actions.bindDefaultFolder();
+				}).open();
+			}),
+		)
+		.addButton((button) =>
+			button
+				.setButtonText("Use this folder")
+				.setCta()
+				.onClick(async () => {
+					// The bind reads the key, so the last keystroke's save must land first.
+					await saved;
+					await actions.bindDefaultFolder();
 				}),
 		);
 }

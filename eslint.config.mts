@@ -444,8 +444,9 @@ export default defineConfig(
 		// acquisition step, and it stays beside the connect/teardown logic owned here.
 		// Re-pinned from 373 for poll-completed auth: a module with no redirect back to
 		// Obsidian completes inside the same connect call that started it.
+		// Re-pinned from 374 for resuming a pending poll sign-in, which reuses the connect path's `connecting` guard.
 		files: ["src/fs/backend-manager.ts"],
-		rules: { "max-lines": ["error", { max: 374, skipBlankLines: true, skipComments: true }] },
+		rules: { "max-lines": ["error", { max: 392, skipBlankLines: true, skipComments: true }] },
 	},
 	{
 		// Core composition root for the module boundary: it owns the per-connection
